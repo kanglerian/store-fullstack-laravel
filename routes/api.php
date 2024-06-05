@@ -19,14 +19,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::group(['middleware' => 'api','prefix' => 'auth'], function() {
     Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/refresh', [AuthController::class, 'refresh']);
+    Route::post('/register', [AuthController::class, 'register']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
     Route::post('/me', [AuthController::class, 'me']);
 });
-
-// Route::get('/user', [AuthController::class, 'getAuthenticatedUser']);
-
-// Route::middleware(['jwt.auth','auth:api'])->group(function () {
-//     Route::resource('stuff', StuffController::class);
-// });
-

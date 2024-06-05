@@ -23,7 +23,7 @@ class AuthController extends Controller
      */
     public function __construct()
     {
-        $this->middleware('auth:api', ['except' => ['login']]);
+        $this->middleware('auth:api', ['except' => ['login', 'register', 'refresh']]);
     }
 
     public function login(Request $request)
@@ -47,23 +47,36 @@ class AuthController extends Controller
 
         $credentials = $request->only('email', 'password');
         try {
-            if (!$token = JWTAuth::attempt($credentials)) {
+            if (!JWTAuth::attempt($credentials)) {
                 return response()->json([
                     'error' => 'Invalid credentials'
                 ], 401);
             }
 
             $user = auth()->user();
+            $user_update = User::find($user->id);
 
             $customClaims = [
                 'id' => $user->id,
                 'name' => $user->name,
-                'email' => $user->email,
+                'type' => 'refresh'
             ];
 
-            $token = JWTAuth::claims($customClaims)->attempt($credentials);
+            $accessToken = JWTAuth::fromUser($user);
+            $factory = JWTFactory::customClaims($customClaims)->setTTL(1440);
+            $refreshToken = JWTAuth::encode($factory->make())->get();
 
-            return response()->json(compact('token'));
+            $user_update->update([
+                'refresh_token' => $refreshToken
+            ]);
+
+            return response()->json([
+                'access_token' => $accessToken,
+                'token_type' => 'Bearer',
+                'expires_in' => 1 * 60,
+                'refresh_token' => $refreshToken,
+                'refresh_expires_in' => 24 * 60 * 60
+            ]);
 
         } catch (JWTException $e) {
             return response()->json([
@@ -108,9 +121,29 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        $token = JWTAuth::fromUser($user);
+        $user_update = User::find($user->id);
 
-        return response()->json(compact('user', 'token'), 201);
+        $customClaims = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'type' => 'refresh'
+        ];
+
+        $accessToken = JWTAuth::fromUser($user);
+        $factory = JWTFactory::customClaims($customClaims)->setTTL(1440);
+        $refreshToken = JWTAuth::encode($factory->make())->get();
+
+        $user_update->update([
+            'refresh_token' => $refreshToken
+        ]);
+
+        return response()->json([
+            'access_token' => $accessToken,
+            'token_type' => 'Bearer',
+            'expires_in' => 1 * 60,
+            'refresh_token' => $refreshToken,
+            'refresh_expires_in' => 24 * 60 * 60
+        ], 201);
     }
 
 
@@ -121,6 +154,12 @@ class AuthController extends Controller
 
     public function logout()
     {
+        $user = auth()->user();
+        $user_update = User::find($user->id);
+        $user_update->update([
+            'refresh_token' => null
+        ]);
+
         auth()->logout();
 
         return response()->json(['message' => 'Successfully logged out']);
@@ -131,24 +170,38 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function refresh()
+    public function refresh(Request $request)
     {
-        return $this->respondWithToken(auth()->refresh());
-    }
+        $refreshToken = $request->input('refresh_token');
 
-    /**
-     * Get the token array structure.
-     *
-     * @param  string $token
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    protected function respondWithToken($token)
-    {
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'bearer',
-            'expires_in' => auth()->factory()->getTTL() * 60
-        ]);
+        try {
+            $payload = JWTAuth::setToken($refreshToken)->getPayload();
+
+            if ($payload['type'] !== 'refresh') {
+                return response()->json(['error' => 'Invalid token type'], 401);
+            }
+
+            $user = User::find($payload['id']);
+
+            if (!$user) {
+                return response()->json(['error' => 'Invalid refresh token'], 401);
+            }
+
+            if($user->refresh_token !== $refreshToken){
+                return response()->json(['error' => 'Tokens do not match'], 401);
+            }
+
+            $token = JWTAuth::fromUser($user);
+
+            return response()->json([
+                'access_token' => $token,
+                'token_type' => 'Bearer',
+                'expires_in' => 1 * 60,
+            ]);
+        } catch (TokenExpiredException $e) {
+            return response()->json(['error' => 'Refresh token expired'], 401);
+        } catch (JWTException $e) {
+            return response()->json(['error' => 'Invalid refresh token'], 401);
+        }
     }
 }
