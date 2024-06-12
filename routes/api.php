@@ -1,8 +1,6 @@
 <?php
 
-use App\Http\Controllers\API\Auth\LoginController;
 use App\Http\Controllers\API\AuthController;
-use App\Http\Controllers\API\StuffController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -17,10 +15,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::group(['middleware' => 'api','prefix' => 'auth'], function() {
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/logout', [AuthController::class, 'logout']);
-    Route::post('/refresh', [AuthController::class, 'refresh']);
+Route::group(['prefix' => 'auth'], function() {
+    Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
+    Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
+    Route::post('/logout', [AuthController::class, 'logout'])->name('auth.logout');
+    Route::post('/refresh', [AuthController::class, 'refresh'])->name('auth.refresh');
     Route::post('/me', [AuthController::class, 'me']);
 });
